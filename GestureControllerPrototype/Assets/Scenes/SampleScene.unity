@@ -555,8 +555,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::HandSkeletonVisualizer
   receiver: {fileID: 121294598}
   cameraTransform: {fileID: 330585546}
-  leftHandOffset: {x: 0.18, y: -0.2, z: 0.55}
-  rightHandOffset: {x: -0.18, y: -0.2, z: 0.55}
+  leftHandOffset: {x: -0.18, y: -0.2, z: 0.55}
+  rightHandOffset: {x: 0.18, y: -0.2, z: 0.55}
   anchorMoveScale: 0.35
   preferWorldLandmarks: 1
   xyScale: 0.7

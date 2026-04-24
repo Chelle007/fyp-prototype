@@ -88,13 +88,7 @@ while cap.isOpened():
             handedness = "Unknown"
             if hand_results.multi_handedness and i < len(hand_results.multi_handedness):
                 try:
-                    raw_label = hand_results.multi_handedness[i].classification[0].label
-                    # Because cv2.flip mirrored the image, MediaPipe's labels are backwards!
-                    # We swap them back here before sending to Unity.
-                    if raw_label == "Left":
-                        handedness = "Right"
-                    elif raw_label == "Right":
-                        handedness = "Left"
+                    handedness = hand_results.multi_handedness[i].classification[0].label
                 except Exception:
                     handedness = "Unknown"
 
