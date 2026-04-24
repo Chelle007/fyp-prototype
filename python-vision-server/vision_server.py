@@ -14,6 +14,7 @@ mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=False,
     max_num_hands=2,
+    model_complexity=1,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7
 )
@@ -87,7 +88,13 @@ while cap.isOpened():
             handedness = "Unknown"
             if hand_results.multi_handedness and i < len(hand_results.multi_handedness):
                 try:
-                    handedness = hand_results.multi_handedness[i].classification[0].label
+                    raw_label = hand_results.multi_handedness[i].classification[0].label
+                    # Because cv2.flip mirrored the image, MediaPipe's labels are backwards!
+                    # We swap them back here before sending to Unity.
+                    if raw_label == "Left":
+                        handedness = "Right"
+                    elif raw_label == "Right":
+                        handedness = "Left"
                 except Exception:
                     handedness = "Unknown"
 
@@ -100,9 +107,20 @@ while cap.isOpened():
                     "z": round(lm.z, 3)
                 })
 
+            # World landmarks (3D, meters-ish, more stable for rig driving)
+            world_landmarks = []
+            if hand_results.multi_hand_world_landmarks and i < len(hand_results.multi_hand_world_landmarks):
+                for wlm in hand_results.multi_hand_world_landmarks[i].landmark:
+                    world_landmarks.append({
+                        "x": round(wlm.x, 4),
+                        "y": round(wlm.y, 4),
+                        "z": round(wlm.z, 4)
+                    })
+
             data_payload["hands"].append({
                 "handedness": handedness,
-                "landmarks": landmarks
+                "landmarks": landmarks,
+                "world_landmarks": world_landmarks
             })
 
     # --- PROCESS FACE ---

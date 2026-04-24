@@ -13,9 +13,15 @@ public class HandSkeletonVisualizer : MonoBehaviour
     public float anchorMoveScale = 0.35f; // how much the whole hand can drift around the offset
 
     [Header("Landmark mapping")]
+    public bool preferWorldLandmarks = true;
     public float xyScale = 0.7f;
     public float zScale = 0.7f;
     public float smoothing = 18f;
+
+    [Tooltip("Scale applied when using world_landmarks (meters-ish).")]
+    public float worldScale = 2.5f;
+    [Tooltip("If the input image is mirrored (cv2.flip(...,1)), mirror X for world landmarks.")]
+    public bool mirrorWorldX = false;
 
     [Header("Rendering")]
     public float jointRadius = 0.02f;
@@ -70,7 +76,8 @@ public class HandSkeletonVisualizer : MonoBehaviour
         for (int i = 0; i < hands.Length; i++)
         {
             HandPacket hp = hands[i];
-            if (hp == null || hp.landmarks == null || hp.landmarks.Length < 21) continue;
+            Landmark[] lmSet = SelectLandmarks(hp);
+            if (hp == null || lmSet == null || lmSet.Length < 21) continue;
 
             string key = NormalizeKey(hp.handedness, i);
             updatedKeys.Add(key);
@@ -81,19 +88,20 @@ public class HandSkeletonVisualizer : MonoBehaviour
             // Let the whole hand move around based on palm center (landmark 9),
             // while still being biased toward a bottom-of-screen XR-style offset.
             Vector3 baseOffset = IsLeft(hp.handedness) ? leftHandOffset : rightHandOffset;
-            Vector2 palmDelta = PalmDelta01(hp.landmarks[9]);
+            Vector2 palmDelta = PalmDelta01(lmSet[9], IsWorld(lmSet, hp));
             Vector3 drift = new Vector3(palmDelta.x, palmDelta.y, 0f) * anchorMoveScale;
 
             Vector3 anchor = cameraTransform.TransformPoint(baseOffset + drift);
             Quaternion camRot = cameraTransform.rotation;
 
             // Pin palm center (landmark 9) to the anchor by rendering all joints relative to it.
-            Vector3 palmLocal = LandmarkToLocal(hp.landmarks[9]);
+            bool world = IsWorld(lmSet, hp);
+            Vector3 palmLocal = LandmarkToLocal(lmSet[9], world);
 
             for (int li = 0; li < 21; li++)
             {
-                Landmark lm = hp.landmarks[li];
-                Vector3 targetLocal = LandmarkToLocal(lm) - palmLocal;
+                Landmark lm = lmSet[li];
+                Vector3 targetLocal = LandmarkToLocal(lm, world) - palmLocal;
 
                 float t = 1f - Mathf.Exp(-smoothing * Time.deltaTime);
                 viz.smoothedLocal[li] = Vector3.Lerp(viz.smoothedLocal[li], targetLocal, t);
@@ -182,13 +190,28 @@ public class HandSkeletonVisualizer : MonoBehaviour
 
     private Vector3 LandmarkToLocal(Landmark lm)
     {
-        // MediaPipe landmarks:
-        // - x,y are normalized to image (0..1), y is downwards
-        // - z is roughly negative when landmark is closer to camera
-        float x = (lm.x - 0.5f);
-        float y = -(lm.y - 0.5f);
-        float z = -lm.z;
-        return new Vector3(x * xyScale, y * xyScale, z * zScale);
+        return LandmarkToLocal(lm, world: false);
+    }
+
+    private Vector3 LandmarkToLocal(Landmark lm, bool world)
+    {
+        if (!world)
+        {
+            // MediaPipe image landmarks:
+            // - x,y are normalized to image (0..1), y is downwards
+            // - z is roughly negative when landmark is closer to camera
+            float nx = (lm.x - 0.5f);
+            float y = -(lm.y - 0.5f);
+            float z = -lm.z;
+            return new Vector3(nx * xyScale, y * xyScale, z * zScale);
+        }
+
+        // MediaPipe world landmarks:
+        // - roughly meters, origin around the wrist/palm
+        // - y is up in MediaPipe world coords; Unity local is also y-up
+        // - z is typically toward the camera (negative is forward-ish); flip for consistency
+        float wx = mirrorWorldX ? -lm.x : lm.x;
+        return new Vector3(wx, -lm.y, -lm.z) * worldScale;
     }
 
     private static bool IsLeft(string handedness)
@@ -196,12 +219,32 @@ public class HandSkeletonVisualizer : MonoBehaviour
         return !string.IsNullOrEmpty(handedness) && handedness.ToLowerInvariant().Contains("left");
     }
 
-    private static Vector2 PalmDelta01(Landmark palmCenterLm)
+    private Vector2 PalmDelta01(Landmark palmCenterLm, bool world)
     {
-        // Map MediaPipe palm center from [0..1] to [-0.5..0.5] and flip Y to Unity-up.
-        float x = palmCenterLm.x - 0.5f;
-        float y = -(palmCenterLm.y - 0.5f);
-        return new Vector2(x, y);
+        if (!world)
+        {
+            // Map MediaPipe palm center from [0..1] to [-0.5..0.5] and flip Y to Unity-up.
+            float x01 = palmCenterLm.x - 0.5f;
+            float y01 = -(palmCenterLm.y - 0.5f);
+            return new Vector2(x01, y01);
+        }
+
+        // World landmarks already centered; use x/y directly (scaled later by anchorMoveScale).
+        // X may be mirrored at the LandmarkToLocal stage; mirror here too so drift matches.
+        float xWorld = mirrorWorldX ? -palmCenterLm.x : palmCenterLm.x;
+        return new Vector2(palmCenterLm.x, -palmCenterLm.y);
+    }
+
+    private Landmark[] SelectLandmarks(HandPacket hp)
+    {
+        if (hp == null) return null;
+        if (preferWorldLandmarks && hp.world_landmarks != null && hp.world_landmarks.Length >= 21) return hp.world_landmarks;
+        return hp.landmarks;
+    }
+
+    private static bool IsWorld(Landmark[] chosen, HandPacket hp)
+    {
+        return hp != null && chosen == hp.world_landmarks;
     }
 
     private static string NormalizeKey(string handedness, int fallbackIndex)

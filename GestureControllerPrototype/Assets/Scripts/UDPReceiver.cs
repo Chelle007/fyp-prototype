@@ -22,6 +22,7 @@ public class HandPacket
 {
     public string handedness; // "Left" / "Right" (MediaPipe label) or "Unknown"
     public Landmark[] landmarks; // 21 landmarks
+    public Landmark[] world_landmarks; // 21 world landmarks (optional)
 }
 
 [System.Serializable]

@@ -20,6 +20,8 @@ public class HandRigDriver : MonoBehaviour
     [Header("Tuning")]
     public float rotationSmoothing = 18f;
     public bool applyHandRootRotation = true;
+    [Tooltip("Enable if your camera feed is mirrored (e.g. cv2.flip(img, 1)). This keeps palm basis orientation correct.")]
+    public bool inputIsMirrored = false;
 
     [Header("Bending (curl-based, more reliable)")]
     public bool useCurlBend = true;
@@ -66,7 +68,9 @@ public class HandRigDriver : MonoBehaviour
         Vector3 p5 = ToVec3(hp.landmarks[5]);
         Vector3 p17 = ToVec3(hp.landmarks[17]);
 
-        Vector3 xAxis = (p5 - p17).normalized; // across palm
+        // Across-palm axis flips when the input image is mirrored.
+        // Swapping the order keeps the derived normal (LookRotation forward) consistent.
+        Vector3 xAxis = inputIsMirrored ? (p17 - p5).normalized : (p5 - p17).normalized;
         Vector3 yAxis = (p5 + p17) * 0.5f - p0; // roughly forward/up along palm
         yAxis = yAxis.normalized;
         Vector3 zAxis = Vector3.Cross(xAxis, yAxis).normalized;
@@ -81,6 +85,7 @@ public class HandRigDriver : MonoBehaviour
 
         // Palm normal in tracker space (used to define a stable finger hinge axis)
         Vector3 palmNormalTracker = Vector3.Cross((p5 - p0), (p17 - p0)).normalized;
+        if (inputIsMirrored) palmNormalTracker = -palmNormalTracker;
 
         // Drive finger chains by rotating each bone from its cached rest direction
         // toward the tracked joint direction, expressed in the bone's parent space.
