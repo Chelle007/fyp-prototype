@@ -13,7 +13,8 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     static_image_mode=False,
-    max_num_hands=1,         
+    max_num_hands=2,
+    model_complexity=1,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7
 )
@@ -53,20 +54,23 @@ while cap.isOpened():
         "hand_y": 0.5, 
         "hand_up": 0, 
         "head_yaw": 0.0, 
-        "head_pitch": 0.0
+        "head_pitch": 0.0,
+        "hands": []
     }
 
     # --- PROCESS HANDS ---
     if hand_results.multi_hand_landmarks:
-        for hand_landmarks in hand_results.multi_hand_landmarks:
+        for i, hand_landmarks in enumerate(hand_results.multi_hand_landmarks):
             mp_draw.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
             
             # FIXED: Track the base of the middle finger (the palm) instead of the fingertip
             palm_center = hand_landmarks.landmark[9]
             wrist = hand_landmarks.landmark[0]
 
-            data_payload["hand_x"] = round(palm_center.x, 3)
-            data_payload["hand_y"] = round(palm_center.y, 3)
+            # Backwards-compatible single-point hand position (use first detected hand)
+            if i == 0:
+                data_payload["hand_x"] = round(palm_center.x, 3)
+                data_payload["hand_y"] = round(palm_center.y, 3)
 
             # FIXED: Robust "Open Hand" check using distance from the wrist
             # We check if the fingertip is further away from the wrist than the knuckle is.
@@ -79,6 +83,39 @@ while cap.isOpened():
             # If all 4 fingers are fully extended away from the wrist, trigger the red color!
             if index_open and middle_open and ring_open and pinky_open:
                 data_payload["hand_up"] = 1
+
+            # Handedness (aligned by index with multi_hand_landmarks)
+            handedness = "Unknown"
+            if hand_results.multi_handedness and i < len(hand_results.multi_handedness):
+                try:
+                    handedness = hand_results.multi_handedness[i].classification[0].label
+                except Exception:
+                    handedness = "Unknown"
+
+            # Full 21 landmarks (normalized image coords + relative z)
+            landmarks = []
+            for lm in hand_landmarks.landmark:
+                landmarks.append({
+                    "x": round(lm.x, 3),
+                    "y": round(lm.y, 3),
+                    "z": round(lm.z, 3)
+                })
+
+            # World landmarks (3D, meters-ish, more stable for rig driving)
+            world_landmarks = []
+            if hand_results.multi_hand_world_landmarks and i < len(hand_results.multi_hand_world_landmarks):
+                for wlm in hand_results.multi_hand_world_landmarks[i].landmark:
+                    world_landmarks.append({
+                        "x": round(wlm.x, 4),
+                        "y": round(wlm.y, 4),
+                        "z": round(wlm.z, 4)
+                    })
+
+            data_payload["hands"].append({
+                "handedness": handedness,
+                "landmarks": landmarks,
+                "world_landmarks": world_landmarks
+            })
 
     # --- PROCESS FACE ---
     if face_results.multi_face_landmarks:

@@ -36,7 +36,7 @@ Keep Play mode running while you use the vision server.
 From a terminal:
 
 ```bash
-cd "fyp-prototype/python-vision-server"
+cd python-vision-server
 ```
 
 ### Option A — use the existing virtual environment (if `myenv` is present)

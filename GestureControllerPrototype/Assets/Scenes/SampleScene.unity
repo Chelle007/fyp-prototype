@@ -155,6 +155,7 @@ MonoBehaviour:
     hand_up: 0
     head_yaw: 0
     head_pitch: 0
+    hands: []
 --- !u!4 &121294599
 Transform:
   m_ObjectHideFlags: 0
@@ -261,7 +262,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 1, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 910342045}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &330585547
@@ -500,6 +502,68 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &910342044
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 910342045}
+  - component: {fileID: 910342046}
+  m_Layer: 0
+  m_Name: HandSkeletonVisualizer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &910342045
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910342044}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 330585546}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &910342046
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910342044}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0ec40184d0a346ffb5f1abd24d4d4e5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::HandSkeletonVisualizer
+  receiver: {fileID: 121294598}
+  palmPrefab: {fileID: 0}
+  knucklePrefab: {fileID: 7218983198775733514, guid: 83ed49334c5f44ac3a94ccd8ccd2e08a, type: 3}
+  fingertipPrefab: {fileID: 7218983198775733514, guid: 83ed49334c5f44ac3a94ccd8ccd2e08a, type: 3}
+  cameraTransform: {fileID: 330585546}
+  leftHandOffset: {x: -0.2, y: -0.2, z: 0.55}
+  rightHandOffset: {x: 0.2, y: -0.2, z: 0.55}
+  anchorMoveScale: 0.35
+  preferWorldLandmarks: 1
+  xyScale: 0.7
+  zScale: 0.7
+  smoothing: 18
+  worldScale: 2.5
+  mirrorWorldX: 0
+  jointRadius: 0.02
+  lineWidth: 0.008
+  leftColor: {r: 0.35, g: 0.85, b: 1, a: 1}
+  rightColor: {r: 1, g: 0.55, b: 0.35, a: 1}
 --- !u!1 &1687879334
 GameObject:
   m_ObjectHideFlags: 0
