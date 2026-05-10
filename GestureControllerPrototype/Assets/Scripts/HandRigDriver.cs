@@ -61,7 +61,15 @@ public class HandRigDriver : MonoBehaviour
         CacheRestPoseIfNeeded();
 
         HandPacket hp = FindHand(receiver.currentData, handedness);
-        if (hp == null || hp.landmarks == null || hp.landmarks.Length < 21) return;
+        if (hp == null || hp.landmarks == null || hp.landmarks.Length < 21) 
+        {
+            // Hide the 3D hand when you put your physical hand down
+            if (handRoot != null) handRoot.gameObject.SetActive(false); 
+            return;
+        }
+
+        // Show the 3D hand again when tracking resumes
+        if (handRoot != null) handRoot.gameObject.SetActive(true);
 
         // Build a palm basis from wrist(0), index_mcp(5), pinky_mcp(17)
         Vector3 p0 = ToVec3(hp.landmarks[0]);
@@ -80,7 +88,26 @@ public class HandRigDriver : MonoBehaviour
 
         if (applyHandRootRotation && handRoot != null)
         {
+            // 1. Rotate the wrist
             handRoot.rotation = Smooth(handRoot.rotation, palmRot, rotationSmoothing);
+
+            // 2. Move the hand to match the skeleton EXACTLY!
+            if (Camera.main != null)
+            {
+                // Match the exact offsets from your HandSkeletonVisualizer Inspector
+                Vector3 baseOffset = handedness.ToLower().Contains("right") 
+                    ? new Vector3(0.2f, -0.2f, 0.55f)   // Right offset
+                    : new Vector3(-0.2f, -0.2f, 0.55f); // Left offset
+
+                // Use the palm center (landmark 9) just like the skeleton does
+                Vector3 p9 = ToVec3(hp.landmarks[9]); 
+                
+                // Scale it by 0.35 to perfectly match the visualizer's "Anchor Move Scale"
+                Vector3 drift = new Vector3(p9.x, p9.y, 0f) * 0.35f;
+
+                Vector3 targetPos = Camera.main.transform.TransformPoint(baseOffset + drift);
+                handRoot.position = Vector3.Lerp(handRoot.position, targetPos, Time.deltaTime * rotationSmoothing);
+            }
         }
 
         // Palm normal in tracker space (used to define a stable finger hinge axis)

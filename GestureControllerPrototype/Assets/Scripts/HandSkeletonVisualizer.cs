@@ -6,24 +6,27 @@ public class HandSkeletonVisualizer : MonoBehaviour
     [Header("Input")]
     public UDPReceiver receiver;
 
+    [Header("Modular 3D Assets (Optional)")]
+    [Tooltip("Drop your 3D models here. If empty, uses standard spheres.")]
+    public GameObject palmPrefab;
+    public GameObject knucklePrefab;
+    public GameObject fingertipPrefab;
+
     [Header("Placement (first-person XR-style)")]
     public Transform cameraTransform;
     public Vector3 leftHandOffset = new Vector3(-0.18f, -0.10f, 0.55f);
     public Vector3 rightHandOffset = new Vector3(0.18f, -0.10f, 0.55f);
-    public float anchorMoveScale = 0.35f; // how much the whole hand can drift around the offset
+    public float anchorMoveScale = 0.35f;
 
     [Header("Landmark mapping")]
     public bool preferWorldLandmarks = true;
     public float xyScale = 0.7f;
     public float zScale = 0.7f;
     public float smoothing = 18f;
-
-    [Tooltip("Scale applied when using world_landmarks (meters-ish).")]
     public float worldScale = 2.5f;
-    [Tooltip("If the input image is mirrored (cv2.flip(...,1)), mirror X for world landmarks.")]
     public bool mirrorWorldX = false;
 
-    [Header("Rendering")]
+    [Header("Rendering (Fallback if no Prefabs)")]
     public float jointRadius = 0.02f;
     public float lineWidth = 0.008f;
     public Color leftColor = new Color(0.35f, 0.85f, 1f, 1f);
@@ -31,18 +34,12 @@ public class HandSkeletonVisualizer : MonoBehaviour
 
     private static readonly (int a, int b)[] Connections =
     {
-        // Thumb
-        (0, 1), (1, 2), (2, 3), (3, 4),
-        // Index
-        (0, 5), (5, 6), (6, 7), (7, 8),
-        // Middle
-        (5, 9), (9, 10), (10, 11), (11, 12),
-        // Ring
-        (9, 13), (13, 14), (14, 15), (15, 16),
-        // Pinky
-        (13, 17), (17, 18), (18, 19), (19, 20),
-        // Palm edge
-        (0, 17)
+        (0, 1), (1, 2), (2, 3), (3, 4),       // Thumb
+        (0, 5), (5, 6), (6, 7), (7, 8),       // Index
+        (5, 9), (9, 10), (10, 11), (11, 12),  // Middle
+        (9, 13), (13, 14), (14, 15), (15, 16),// Ring
+        (13, 17), (17, 18), (18, 19), (19, 20),// Pinky
+        (0, 17)                               // Palm edge
     };
 
     private class HandViz
@@ -70,7 +67,6 @@ public class HandSkeletonVisualizer : MonoBehaviour
         TrackingData data = receiver.currentData;
         HandPacket[] hands = data.hands ?? System.Array.Empty<HandPacket>();
 
-        // Mark all as not-updated; we’ll hide any that aren’t present this frame.
         HashSet<string> updatedKeys = new HashSet<string>();
 
         for (int i = 0; i < hands.Length; i++)
@@ -85,19 +81,16 @@ public class HandSkeletonVisualizer : MonoBehaviour
             HandViz viz = GetOrCreateViz(key, IsLeft(hp.handedness));
             viz.root.SetActive(true);
 
-            // Let the whole hand move around based on palm center (landmark 9),
-            // while still being biased toward a bottom-of-screen XR-style offset.
             Vector3 baseOffset = IsLeft(hp.handedness) ? leftHandOffset : rightHandOffset;
             Vector2 palmDelta = PalmDelta01(lmSet[9], IsWorld(lmSet, hp));
             Vector3 drift = new Vector3(palmDelta.x, palmDelta.y, 0f) * anchorMoveScale;
 
             Vector3 anchor = cameraTransform.TransformPoint(baseOffset + drift);
             Quaternion camRot = cameraTransform.rotation;
-
-            // Pin palm center (landmark 9) to the anchor by rendering all joints relative to it.
             bool world = IsWorld(lmSet, hp);
             Vector3 palmLocal = LandmarkToLocal(lmSet[9], world);
 
+            // 1. Position all the joints
             for (int li = 0; li < 21; li++)
             {
                 Landmark lm = lmSet[li];
@@ -110,22 +103,31 @@ public class HandSkeletonVisualizer : MonoBehaviour
                 viz.joints[li].transform.position = worldPos;
             }
 
+            // 2. Draw lines and Orient the 3D meshes using LookAt!
             for (int ci = 0; ci < Connections.Length; ci++)
             {
                 (int a, int b) = Connections[ci];
+                
+                // Draw connecting lines
                 LineRenderer lr = viz.lines[ci];
                 lr.SetPosition(0, viz.joints[a].transform.position);
                 lr.SetPosition(1, viz.joints[b].transform.position);
+
+                // IMPORTANT: Make the 3D mesh point directly at the next joint!
+                viz.joints[a].transform.LookAt(viz.joints[b].transform.position);
             }
+
+            // 3. Fingertips have no "next joint" to look at, so they copy the rotation of the joint behind them.
+            viz.joints[4].transform.rotation = viz.joints[3].transform.rotation;
+            viz.joints[8].transform.rotation = viz.joints[7].transform.rotation;
+            viz.joints[12].transform.rotation = viz.joints[11].transform.rotation;
+            viz.joints[16].transform.rotation = viz.joints[15].transform.rotation;
+            viz.joints[20].transform.rotation = viz.joints[19].transform.rotation;
         }
 
-        // Hide any visuals not present in this frame
         foreach (var kv in _byKey)
         {
-            if (!updatedKeys.Contains(kv.Key))
-            {
-                kv.Value.root.SetActive(false);
-            }
+            if (!updatedKeys.Contains(kv.Key)) kv.Value.root.SetActive(false);
         }
     }
 
@@ -144,15 +146,29 @@ public class HandSkeletonVisualizer : MonoBehaviour
 
         for (int i = 0; i < 21; i++)
         {
-            GameObject j = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            GameObject j = null;
+
+            // Decide which 3D model to spawn
+            if (i == 4 || i == 8 || i == 12 || i == 16 || i == 20) {
+                if (fingertipPrefab != null) j = Instantiate(fingertipPrefab);
+            } else if (i == 0 || i == 9) {
+                if (palmPrefab != null) j = Instantiate(palmPrefab);
+            } else {
+                if (knucklePrefab != null) j = Instantiate(knucklePrefab);
+            }
+
+            // Fallback to default spheres if no prefab is assigned
+            if (j == null)
+            {
+                j = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                j.transform.localScale = Vector3.one * (jointRadius * 2f);
+                var r = j.GetComponent<Renderer>();
+                if (r != null) r.material.color = c;
+            }
+
             j.name = $"J{i}";
             j.transform.SetParent(root.transform, worldPositionStays: true);
-            j.transform.localScale = Vector3.one * (jointRadius * 2f);
 
-            var r = j.GetComponent<Renderer>();
-            if (r != null) r.material.color = c;
-
-            // No physics
             var col = j.GetComponent<Collider>();
             if (col != null) Destroy(col);
 
@@ -175,64 +191,23 @@ public class HandSkeletonVisualizer : MonoBehaviour
             lines[i] = lr;
         }
 
-        HandViz viz = new HandViz
-        {
-            root = root,
-            joints = joints,
-            lines = lines,
-            smoothedLocal = smoothed,
-            color = c
-        };
-
+        HandViz viz = new HandViz { root = root, joints = joints, lines = lines, smoothedLocal = smoothed, color = c };
         _byKey[key] = viz;
         return viz;
     }
 
-    private Vector3 LandmarkToLocal(Landmark lm)
-    {
-        return LandmarkToLocal(lm, world: false);
-    }
-
     private Vector3 LandmarkToLocal(Landmark lm, bool world)
     {
-        if (!world)
-        {
-            // MediaPipe image landmarks:
-            // - x,y are normalized to image (0..1), y is downwards
-            // - z is roughly negative when landmark is closer to camera
-            float nx = (lm.x - 0.5f);
-            float y = -(lm.y - 0.5f);
-            float z = -lm.z;
-            return new Vector3(nx * xyScale, y * xyScale, z * zScale);
-        }
-
-        // MediaPipe world landmarks:
-        // - roughly meters, origin around the wrist/palm
-        // - y is up in MediaPipe world coords; Unity local is also y-up
-        // - z is typically toward the camera (negative is forward-ish); flip for consistency
-        float wx = mirrorWorldX ? -lm.x : lm.x;
-        return new Vector3(wx, -lm.y, -lm.z) * worldScale;
+        if (!world) return new Vector3((lm.x - 0.5f) * xyScale, -(lm.y - 0.5f) * xyScale, -lm.z * zScale);
+        return new Vector3(mirrorWorldX ? -lm.x : lm.x, -lm.y, -lm.z) * worldScale;
     }
 
-    private static bool IsLeft(string handedness)
-    {
-        return !string.IsNullOrEmpty(handedness) && handedness.ToLowerInvariant().Contains("left");
-    }
+    private static bool IsLeft(string handedness) => !string.IsNullOrEmpty(handedness) && handedness.ToLowerInvariant().Contains("left");
 
     private Vector2 PalmDelta01(Landmark palmCenterLm, bool world)
     {
-        if (!world)
-        {
-            // Map MediaPipe palm center from [0..1] to [-0.5..0.5] and flip Y to Unity-up.
-            float x01 = palmCenterLm.x - 0.5f;
-            float y01 = -(palmCenterLm.y - 0.5f);
-            return new Vector2(x01, y01);
-        }
-
-        // World landmarks already centered; use x/y directly (scaled later by anchorMoveScale).
-        // X may be mirrored at the LandmarkToLocal stage; mirror here too so drift matches.
-        float xWorld = mirrorWorldX ? -palmCenterLm.x : palmCenterLm.x;
-        return new Vector2(palmCenterLm.x, -palmCenterLm.y);
+        if (!world) return new Vector2(palmCenterLm.x - 0.5f, -(palmCenterLm.y - 0.5f));
+        return new Vector2(mirrorWorldX ? -palmCenterLm.x : palmCenterLm.x, -palmCenterLm.y);
     }
 
     private Landmark[] SelectLandmarks(HandPacket hp)
@@ -242,15 +217,7 @@ public class HandSkeletonVisualizer : MonoBehaviour
         return hp.landmarks;
     }
 
-    private static bool IsWorld(Landmark[] chosen, HandPacket hp)
-    {
-        return hp != null && chosen == hp.world_landmarks;
-    }
+    private static bool IsWorld(Landmark[] chosen, HandPacket hp) => hp != null && chosen == hp.world_landmarks;
 
-    private static string NormalizeKey(string handedness, int fallbackIndex)
-    {
-        if (string.IsNullOrEmpty(handedness) || handedness == "Unknown") return $"Hand{fallbackIndex}";
-        return handedness;
-    }
+    private static string NormalizeKey(string handedness, int fallbackIndex) => string.IsNullOrEmpty(handedness) || handedness == "Unknown" ? $"Hand{fallbackIndex}" : handedness;
 }
-
